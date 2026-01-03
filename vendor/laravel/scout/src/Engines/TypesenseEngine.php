@@ -6,6 +6,7 @@ use Exception;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\LazyCollection;
 use Laravel\Scout\Builder;
 use Laravel\Scout\Exceptions\NotSupportedException;
@@ -89,7 +90,10 @@ class TypesenseEngine extends Engine
                 $searchableData,
                 $model->scoutMetadata(),
             );
-        })->filter()->values()->all();
+        })
+            ->filter()
+            ->values()
+            ->all();
 
         if (! empty($objects)) {
             $this->importDocuments(
@@ -104,15 +108,17 @@ class TypesenseEngine extends Engine
      *
      * @param  TypesenseCollection  $collectionIndex
      * @param  array  $documents
-     * @param  string  $action
+     * @param  string|null  $action
      * @return \Illuminate\Support\Collection
      *
      * @throws \JsonException
      * @throws \Typesense\Exceptions\TypesenseClientError
      * @throws \Http\Client\Exception
      */
-    protected function importDocuments(TypesenseCollection $collectionIndex, array $documents, string $action = 'emplace'): Collection
+    protected function importDocuments(TypesenseCollection $collectionIndex, array $documents, ?string $action = null): Collection
     {
+        $action = $action ?? Config::get('scout.typesense.import_action', 'upsert');
+
         $importedDocuments = $collectionIndex->getDocuments()->import($documents, ['action' => $action]);
 
         $results = [];
@@ -516,12 +522,8 @@ class TypesenseEngine extends Engine
         $objectIdPositions = array_flip($objectIds);
 
         return $model->getScoutModelsByIds($builder, $objectIds)
-            ->filter(static function ($model) use ($objectIds) {
-                return in_array($model->getScoutKey(), $objectIds, false);
-            })
-            ->sortBy(static function ($model) use ($objectIdPositions) {
-                return $objectIdPositions[$model->getScoutKey()];
-            })
+            ->filter(static fn ($model) => in_array($model->getScoutKey(), $objectIds, false))
+            ->sortBy(static fn ($model) => $objectIdPositions[$model->getScoutKey()])
             ->values();
     }
 
@@ -548,12 +550,8 @@ class TypesenseEngine extends Engine
 
         return $model->queryScoutModelsByIds($builder, $objectIds)
             ->cursor()
-            ->filter(static function ($model) use ($objectIds) {
-                return in_array($model->getScoutKey(), $objectIds, false);
-            })
-            ->sortBy(static function ($model) use ($objectIdPositions) {
-                return $objectIdPositions[$model->getScoutKey()];
-            })
+            ->filter(static fn ($model) => in_array($model->getScoutKey(), $objectIds, false))
+            ->sortBy(static fn ($model) => $objectIdPositions[$model->getScoutKey()])
             ->values();
     }
 
